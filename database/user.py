@@ -12,4 +12,6 @@ class User(SqlAlchemyBase, SerializerMixin):
     city = sa.Column(sa.String)
     inst = sa.Column(sa.String)
     gens = sa.Column(sa.String)
+    exp = sa.Column(sa.String)
+    description = sa.Column(sa.String)
 
