@@ -14,4 +14,4 @@ class User(SqlAlchemyBase, SerializerMixin):
     gens = sa.Column(sa.String)
     exp = sa.Column(sa.String)
     description = sa.Column(sa.String)
-
+    favorite_users = sa.Column(sa.String)
