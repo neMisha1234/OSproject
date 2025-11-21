@@ -8,13 +8,16 @@ db_sess = db_session.create_session()
 
 for el in instruments_data:
     for elem in instruments_data[el]:
-        inst = Instruments()
-        inst.name = elem
-        inst.inst_type = el
-        db_sess.add(inst)
+        if not db_sess.query(Instruments).filter(Instruments.name == elem).first():
+            inst = Instruments()
+            inst.name = elem
+            inst.inst_type = el
+            db_sess.add(inst)
 
 for el in genres_data:
-    gent = Genres()
-    gent.name = el
+    if not db_sess.query(Genres).filter(Genres.name == el).first():
+        gent = Genres()
+        gent.name = el
+        db_sess.add(gent)
 
 db_sess.commit()
