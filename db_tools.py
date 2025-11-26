@@ -42,8 +42,10 @@ def get_user(tg_id):
 
 def get_liked_users(uid):
     lst = []
+    main_user = db_sess.query(User).filter(User.id == uid).first()
+    con = lambda x, y: (';' + x + ';') in y or (x + ';') in y or (';' + x) in y or x == y
     for user in db_sess.query(User).all():
-        if (';' + str(uid) + ';') in user.favorite_users:
+        if user.favorite_users and con(str(uid), user.favorite_users) and not con(str(user.id), main_user.favorite_users):
             lst.append(user)
     return lst
 

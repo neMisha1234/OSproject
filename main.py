@@ -6,7 +6,8 @@ from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, Callb
 import db_tools
 from filters import build_gen_keyboard, build_inst_keyboard, build_inst_type_keyboard
 from filters import (filter_city, filter_age, filter_age_input, filter_city_input,
-                     filter_menu, filter_entry, filter_menu_handler, menu, filter_entr,)
+                     filter_menu, filter_entry, filter_menu_handler, menu, filter_entr, push_users)
+from APIwork.get_event import get_info_event
 from database.user import User
 import LAST_PINNED
 
@@ -158,6 +159,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     tg_id = update.effective_user.id
     selected_gen: set = context.user_data.get("selected_genres", set())
     selected_inst: set = context.user_data.get('selected_insts', set())
+    con = lambda x, y: (';' + x + ';') in y or (x + ';') in y or (';' + x) in y or x == y
     if query.data == 'recreate':
         await context.bot.send_message(chat_id=chat_id,
                                        text='Ваша старая анкета будет полностью удалена,'
@@ -167,12 +169,43 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data == 'no':
         await context.bot.send_message(chat_id=chat_id, text='Введите /menu')
     elif query.data == 'events' and not IS_FORM_CREATE:
-        await context.bot.send_message(chat_id=chat_id, text='Я хз как тут подключить апишку')
+        photo, txt = '', ''
+        while not(photo and txt):
+            try:
+                photo, txt = get_info_event()
+            except Exception:
+                pass
+        await context.bot.send_photo(chat_id=chat_id, caption=txt, photo=photo)
 
     elif query.data == 'liked' and not IS_FORM_CREATE:
-        context.user_data['current_anket'] = db_tools.get_user(tg_id)
-        context.user_data["liked_ankets"] = db_tools.get_liked_users()
-        await context.bot.send_message(chat_id=chat_id, text='Тут будут лайкнувшие тебя люди')
+        user = db_tools.get_user(tg_id)
+        context.user_data["liked_ankets"] = db_tools.get_liked_users(user.id)
+        await show_next_liked_anket(chat_id, context, tg_id)
+
+    elif query.data == 'like':
+        cur_anket = context.user_data.get('current_anket')
+        other_user = db_tools.get_user(cur_anket.telegram_id)
+        user = db_tools.get_user(tg_id)
+        if con(str(other_user.id), user.favorite_users):
+            await context.bot.send_message("Вы уже лайкнули эту анкету", chat_id=chat_id)
+        else:
+            if user.favorite_users:
+                if not(con(str(other_user.id), user.favorite_users)):
+                    user.favorite_users += f";{other_user.id}"
+            else:
+                user.favorite_users = other_user.id
+            db_tools.save_user(user)
+            if other_user.favorite_users:
+                if con(str(user.id), other_user.favorite_users):
+                    await push_users(update, context, user_id=user.telegram_id, other_user_id=other_user.telegram_id)
+
+    elif query.data == 'skip':
+        await show_next_liked_anket(chat_id, context, tg_id=tg_id)
+
+
+    elif query.data == "back_to_menu":
+        await menu(update, context)
+        return ConversationHandler.END
 
     elif query.data == 'my_anketa' and not IS_FORM_CREATE:
         tg_id = update.effective_user.id
@@ -248,6 +281,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['user'].exp = int(query.data.split(':')[1])
         await context.bot.send_message(chat_id=chat_id, text='Придумайте своё описание? Что любите? Что нужно знать о вас? и т.д.')
         return descrip
+
     elif query.data == "menu":
         await menu(update, context)
 
@@ -299,7 +333,7 @@ if __name__ == '__main__':
     app.add_handler(filter_conv)
     # Меню кнопки
     app.add_handler(
-        CallbackQueryHandler(button_handler, pattern="^(create|recreate|form|events|liked|my_anketa|info|no|menu)$"))
+        CallbackQueryHandler(button_handler, pattern="^(create|recreate|form|events|liked|my_anketa|info|no|menu|like|skip|back_to_menu)$"))
 
     # Жанры
     app.add_handler(CallbackQueryHandler(button_handler, pattern="^(genre:.*|done_gen)$"))

@@ -155,7 +155,7 @@ async def show_next_anket(chat_id, context, tg_id):
 
     # берём первую
     user = ankets.pop(0)
-    if int(user.telegram_id) == int(tg_id) or str(user.id) in cur_user.favorite_users:
+    if int(user.telegram_id) == int(tg_id) or (cur_user.favorite_users and str(user.id) in cur_user.favorite_users):
         user = ankets.pop(0)
     context.user_data["current_anket"] = user
     context.user_data["ankets"] = ankets
@@ -201,6 +201,7 @@ async def filter_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
     selected_inst: set = context.user_data.get('selected_insts', set())
     chat_id = query.message.chat.id
     tg_id = update.effective_user.id
+    con = lambda x, y: (';' + x + ';') in y or (x + ';') in y or (';' + x) in y or x == y
 
     cd = query.data
 
@@ -285,15 +286,18 @@ async def filter_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
         cur_anket = context.user_data.get('current_anket')
         other_user = db_tools.get_user(cur_anket.telegram_id)
         user = db_tools.get_user(tg_id)
-        if user.favorite_users:
-            if not str(other_user.id) in user.favorite_users:
-                user.favorite_users += f";{other_user.id}"
+        if con(str(other_user.id), user.favorite_users):
+            await context.bot.send_message(text="Вы уже лайкнули эту анкету", chat_id=chat_id)
         else:
-            user.favorite_users = other_user.id
-        db_tools.save_user(user)
-        if other_user.favorite_users:
-            if str(user.id) in other_user.favorite_users:
-                await push_users(update, context, user_id=user.telegram_id, other_user_id=other_user.telegram_id)
+            if user.favorite_users:
+                if not(con(str(other_user.id), user.favorite_users)):
+                    user.favorite_users += f";{other_user.id}"
+            else:
+                user.favorite_users = other_user.id
+            db_tools.save_user(user)
+            if other_user.favorite_users:
+                if con(str(user.id), other_user.favorite_users):
+                    await push_users(update, context, user_id=user.telegram_id, other_user_id=other_user.telegram_id)
 
     elif cd == 'skip':
         await show_next_anket(chat_id, context, tg_id=tg_id)
