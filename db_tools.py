@@ -31,6 +31,25 @@ def load_to_db(tg_id, name, age, city, inst, genres, description, exp):
     db_sess.commit()
 
 
+def delete_user(tg_id):
+    user = db_sess.query(User).filter(User.telegram_id == tg_id).first()
+    db_sess.delete(user)
+
+
+def get_user(tg_id):
+    return db_sess.query(User).filter(User.telegram_id == tg_id).first()
+
+
+def get_liked_users(uid):
+    lst = []
+    main_user = db_sess.query(User).filter(User.id == uid).first()
+    con = lambda x, y: (';' + x + ';') in y or (x + ';') in y or (';' + x) in y or x == y
+    for user in db_sess.query(User).all():
+        if user.favorite_users and con(str(uid), user.favorite_users) and not con(str(user.id), main_user.favorite_users):
+            lst.append(user)
+    return lst
+
+
 def save_user(user):
     db_sess.add(user)
     db_sess.commit()
@@ -101,4 +120,15 @@ def build_anket(tg_id):
 
 
 def search_users(city='', age='', insts='', genres=''):
-    pass
+    users = db_sess.query(User).all()
+    if city:
+        users = list(filter(lambda x: x.city == city.capitalize(), users))
+    if age:
+        users = list(filter(lambda x: age[0] <= x.age <= age[1], users))
+    if insts:
+        for inst in insts.split(';'):
+            users = list(filter(lambda x: inst in x.inst, users))
+    if genres:
+        for gen in genres.split(';'):
+            users = list(filter(lambda x: gen in x.gens, users))
+    return users
