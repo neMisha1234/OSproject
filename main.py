@@ -1,6 +1,6 @@
 from system_data import BOT_TOKEN
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Bot, User
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto, User
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, CallbackQueryHandler, ConversationHandler, \
     filters, MessageHandler
 import db_tools
@@ -131,6 +131,40 @@ async def show_next_liked_anket(chat_id, context: ContextTypes.DEFAULT_TYPE, tg_
     return filter_entr  # или ваше состояние
 
 
+async def show_next_event(chat_id, context, txt, photo):
+    keyboard = []
+    if len(context.user_data["showed_events"]) == 0:
+        keyboard.append([InlineKeyboardButton("➡️", callback_data='next_ev')])
+    else:
+        keyboard.append([
+            InlineKeyboardButton("⬅️", callback_data='previous_ev'),
+            InlineKeyboardButton("➡️", callback_data='next_ev')
+        ])
+
+    # Если это первое событие → отправляем новое сообщение
+    if "event_message_id" not in context.user_data:
+        msg = await context.bot.send_photo(
+            chat_id=chat_id,
+            photo=photo,
+            caption=txt,
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        context.user_data["event_message_id"] = msg.message_id
+        context.user_data["showed_events"].append((txt, photo))
+        return
+
+    # Если сообщение уже есть → редактируем
+    await context.bot.edit_message_media(
+        chat_id=chat_id,
+        message_id=context.user_data["event_message_id"],
+        media=InputMediaPhoto(photo, caption=txt),
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+    context.user_data["showed_events"].append((txt, photo))
+
+
+
 async def create_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global IS_FORM_CREATE
     query = update.callback_query
@@ -160,6 +194,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     selected_gen: set = context.user_data.get("selected_genres", set())
     selected_inst: set = context.user_data.get('selected_insts', set())
     con = lambda x, y: (';' + x + ';') in y or (x + ';') in y or (';' + x) in y or x == y
+
     if query.data == 'recreate':
         await context.bot.send_message(chat_id=chat_id,
                                        text='Ваша старая анкета будет полностью удалена,'
@@ -168,14 +203,30 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                                                            InlineKeyboardButton('Нет', callback_data="no")]]))
     elif query.data == 'no':
         await context.bot.send_message(chat_id=chat_id, text='Введите /menu')
+
     elif query.data == 'events' and not IS_FORM_CREATE:
+        context.user_data["showed_events"] = []
         photo, txt = '', ''
         while not(photo and txt):
             try:
                 photo, txt = get_info_event()
             except Exception:
                 pass
-        await context.bot.send_photo(chat_id=chat_id, caption=txt, photo=photo)
+        await show_next_event(chat_id, context, txt, photo)
+
+    elif query.data == "next_ev":
+        photo, txt = '', ''
+        while not (photo and txt):
+            try:
+                photo, txt = get_info_event()
+            except Exception:
+                pass
+        await show_next_event(chat_id, context, txt, photo)
+
+    elif query.data == "previous_ev":
+        txt, photo = context.user_data["showed_events"][-1]
+        context.user_data["showed_events"] = context.user_data["showed_events"][:-1]
+        await show_next_event(chat_id, context, txt, photo)
 
     elif query.data == 'liked' and not IS_FORM_CREATE:
         user = db_tools.get_user(tg_id)
@@ -286,6 +337,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await menu(update, context)
 
 
+
 # Основной блок запуска
 if __name__ == '__main__':
     app = ApplicationBuilder().token(BOT_TOKEN).build()
@@ -333,7 +385,7 @@ if __name__ == '__main__':
     app.add_handler(filter_conv)
     # Меню кнопки
     app.add_handler(
-        CallbackQueryHandler(button_handler, pattern="^(create|recreate|form|events|liked|my_anketa|info|no|menu|like|skip|back_to_menu)$"))
+        CallbackQueryHandler(button_handler, pattern="^(create|recreate|form|previous_ev|next_ev|events|liked|my_anketa|info|no|menu|like|skip|back_to_menu)$"))
 
     # Жанры
     app.add_handler(CallbackQueryHandler(button_handler, pattern="^(genre:.*|done_gen)$"))

@@ -33,7 +33,7 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard.insert(0, [InlineKeyboardButton('Пересоздать анкету', callback_data='recreate')])
     else:
         keyboard.insert(0, [InlineKeyboardButton('Создать анкету', callback_data='create')])
-
+    context.user_data["showed_events"] = []
     await context.bot.send_message(
         chat_id=chat_id,
         text="Привет, этот бот является курсовым проектом,"
